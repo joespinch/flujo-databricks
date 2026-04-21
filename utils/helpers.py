@@ -63,7 +63,7 @@ def validate_schema(df: DataFrame, expected_schema: StructType) -> bool:
         if field.name not in actual_fields:
             log_info(f"Columna faltante: {field.name}")
             return False
-        if type(actual_fields[field.name]) != type(field.dataType):
+        if not isinstance(actual_fields[field.name], type(field.dataType)):
             log_info(
                 f"Tipo incorrecto para '{field.name}': "
                 f"esperado {field.dataType}, encontrado {actual_fields[field.name]}"

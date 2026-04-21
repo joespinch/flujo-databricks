@@ -87,17 +87,14 @@ display(df_customers_raw.limit(10))
 
 # Añadir metadatos de ingesta antes de escribir
 from pyspark.sql import functions as F
-import datetime
 
-ingestion_ts = F.lit(datetime.datetime.utcnow().isoformat())
-
-df_orders_bronze = df_orders_raw.withColumn("_ingestion_timestamp", ingestion_ts) \
+df_orders_bronze = df_orders_raw.withColumn("_ingestion_timestamp", F.current_timestamp()) \
                                  .withColumn("_source", F.lit("simulated"))
 
-df_products_bronze = df_products_raw.withColumn("_ingestion_timestamp", ingestion_ts) \
+df_products_bronze = df_products_raw.withColumn("_ingestion_timestamp", F.current_timestamp()) \
                                      .withColumn("_source", F.lit("simulated"))
 
-df_customers_bronze = df_customers_raw.withColumn("_ingestion_timestamp", ingestion_ts) \
+df_customers_bronze = df_customers_raw.withColumn("_ingestion_timestamp", F.current_timestamp()) \
                                        .withColumn("_source", F.lit("simulated"))
 
 # COMMAND ----------
