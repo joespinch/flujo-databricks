@@ -24,3 +24,6 @@ venv/
 
 # MLflow
 mlruns/
+
+# Credenciales locales de despliegue (generadas por deploy.sh)
+.databricks_credentials
