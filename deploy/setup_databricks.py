@@ -70,7 +70,7 @@ def main() -> None:
         cluster = client.clusters.create_and_wait(
             cluster_name=cluster_name,
             spark_version="14.3.x-scala2.12",   # Databricks Runtime 14.3 LTS
-            node_type_id="Standard_DS3_v2",      # 14 GB RAM, 4 vCores
+            node_type_id="Standard_D4as_v4",     # 16 GB RAM, 4 vCores — disponible en eastus2
             num_workers=0,                        # single-node (sin workers = más barato)
             spark_conf={
                 "spark.master": "local[*]",
