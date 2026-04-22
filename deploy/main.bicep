@@ -2,7 +2,7 @@
 // Flujo Databricks — Plantilla de Infraestructura en Azure (Bicep)
 //
 // Recursos que crea esta plantilla:
-//   1. Azure Databricks Workspace (Standard tier — compatible con créditos)
+//   1. Azure Databricks Workspace (Premium tier — Standard está deprecado)
 //   2. Storage Account con ADLS Gen2 para los datos del pipeline
 //   3. Contenedor "flujo-databricks" dentro del storage account
 // =============================================================================
@@ -19,9 +19,9 @@ param environment string = 'dev'
 @description('Región de Azure donde se crearán los recursos')
 param location string = resourceGroup().location
 
-@description('Tier de precios de Databricks: standard o premium')
+@description('Tier de precios de Databricks: premium (Standard está deprecado)')
 @allowed(['standard', 'premium'])
-param databricksTier string = 'standard'
+param databricksTier string = 'premium'
 
 // ---------------------------------------------------------------------------
 // Variables
