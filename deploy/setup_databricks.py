@@ -73,10 +73,9 @@ def main() -> None:
             node_type_id="Standard_DS3_v2",      # 14 GB RAM, 4 vCores
             num_workers=0,                        # single-node (sin workers = más barato)
             spark_conf={
-                "spark.databricks.cluster.profile": "singleNode",
                 "spark.master": "local[*]",
             },
-            custom_tags={"project": "flujo-databricks"},
+            custom_tags={"project": "flujo-databricks", "ResourceClass": "SingleNode"},
             autotermination_minutes=30,           # Apagado automático tras 30 min inactivo
             data_security_mode=DataSecurityMode.SINGLE_USER,
         )
