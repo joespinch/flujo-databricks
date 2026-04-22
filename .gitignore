@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Databricks
+.databricks/
+
+# MLflow
+mlruns/
+
+# Credenciales locales de despliegue (generadas por deploy.sh)
+.databricks_credentials
