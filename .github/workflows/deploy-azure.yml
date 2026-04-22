@@ -1,0 +1,144 @@
+name: 🚀 Desplegar en Azure Databricks
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Entorno de despliegue'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      location:
+        description: 'Región de Azure'
+        required: true
+        default: 'eastus2'
+        type: choice
+        options:
+          - eastus2
+          - westeurope
+          - eastus
+          - westus2
+
+# Permisos mínimos necesarios
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-infrastructure:
+    name: 🏗️ Infraestructura Azure
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      workspace_url: ${{ steps.deploy.outputs.workspace_url }}
+      workspace_name: ${{ steps.deploy.outputs.workspace_name }}
+      storage_name: ${{ steps.deploy.outputs.storage_name }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Iniciar sesión en Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Crear grupo de recursos
+        run: |
+          az group create \
+            --name "flujo-databricks-${{ inputs.environment }}-rg" \
+            --location "${{ inputs.location }}" \
+            --tags project=flujo-databricks environment=${{ inputs.environment }} \
+            --output none
+          echo "✅ Grupo de recursos listo"
+
+      - name: Desplegar plantilla Bicep
+        id: deploy
+        run: |
+          OUTPUT=$(az deployment group create \
+            --name "flujo-databricks-$(date +%Y%m%d%H%M%S)" \
+            --resource-group "flujo-databricks-${{ inputs.environment }}-rg" \
+            --template-file deploy/main.bicep \
+            --parameters deploy/parameters.json \
+            --parameters environment=${{ inputs.environment }} location=${{ inputs.location }} \
+            --output json)
+
+          WORKSPACE_URL=$(echo "$OUTPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['databricksWorkspaceUrl']['value'])")
+          WORKSPACE_NAME=$(echo "$OUTPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['databricksWorkspaceName']['value'])")
+          STORAGE_NAME=$(echo "$OUTPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['storageAccountName']['value'])")
+
+          echo "workspace_url=$WORKSPACE_URL" >> "$GITHUB_OUTPUT"
+          echo "workspace_name=$WORKSPACE_NAME" >> "$GITHUB_OUTPUT"
+          echo "storage_name=$STORAGE_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "✅ Workspace: $WORKSPACE_URL"
+
+  configure-databricks:
+    name: ⚙️ Configurar Databricks
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install databricks-sdk
+
+      - name: Iniciar sesión en Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Obtener token de Databricks
+        id: get-token
+        run: |
+          MGMT_TOKEN=$(az account get-access-token --resource "https://management.core.windows.net/" --query "accessToken" -o tsv)
+          DB_TOKEN=$(az account get-access-token --resource "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d" --query "accessToken" -o tsv)
+          RESOURCE_ID=$(az databricks workspace show \
+            --name "${{ needs.deploy-infrastructure.outputs.workspace_name }}" \
+            --resource-group "flujo-databricks-${{ inputs.environment }}-rg" \
+            --query "id" -o tsv)
+
+          PAT_RESPONSE=$(curl -s -X POST \
+            "${{ needs.deploy-infrastructure.outputs.workspace_url }}/api/2.0/token/create" \
+            -H "Authorization: Bearer $DB_TOKEN" \
+            -H "X-Databricks-Azure-SP-Management-Token: $MGMT_TOKEN" \
+            -H "X-Databricks-Azure-Workspace-Resource-Id: $RESOURCE_ID" \
+            -H "Content-Type: application/json" \
+            -d '{"comment": "github-actions-deploy", "lifetime_seconds": 86400}')
+
+          PAT=$(echo "$PAT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token_value',''))")
+          echo "::add-mask::$PAT"
+          echo "databricks_pat=$PAT" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar workspace (clúster + repos + MLflow)
+        env:
+          DATABRICKS_HOST: ${{ needs.deploy-infrastructure.outputs.workspace_url }}
+          DATABRICKS_TOKEN: ${{ steps.get-token.outputs.databricks_pat }}
+        run: python deploy/setup_databricks.py
+
+      - name: Resumen del despliegue
+        run: |
+          echo "## ✅ Despliegue completado" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Recurso | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔗 Workspace URL | ${{ needs.deploy-infrastructure.outputs.workspace_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🗄️ Storage Account | ${{ needs.deploy-infrastructure.outputs.storage_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🌍 Entorno | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Próximos pasos" >> $GITHUB_STEP_SUMMARY
+          echo "1. Abre el workspace: ${{ needs.deploy-infrastructure.outputs.workspace_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "2. Ve a **Repos → flujo-databricks → notebooks**" >> $GITHUB_STEP_SUMMARY
+          echo "3. Ejecuta los notebooks en orden: **01 → 02 → 03 → 04**" >> $GITHUB_STEP_SUMMARY
